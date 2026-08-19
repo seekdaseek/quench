@@ -1,0 +1,58 @@
+# quench — liquidation-aware market maker, Bitget SOL-USDT perp
+# Copy to <hummingbot>/conf/controllers/ and start:  start --script v2_with_controllers.py --conf conf/scripts/v2_quench.yml
+id: quench_bitget_sol
+controller_name: quench
+controller_type: market_making
+total_amount_quote: 800
+manual_kill_switch: false
+initial_positions: []
+connector_name: bitget_perpetual
+trading_pair: SOL-USDT
+buy_spreads: 5,10           # in NATR units
+sell_spreads: 5,10
+buy_amounts_pct: 60,40
+sell_amounts_pct: 60,40
+executor_refresh_time: 300
+cooldown_time: 15
+leverage: 5
+position_mode: HEDGE
+stop_loss: 0.03             # base-class field, superseded by sl_natr below (kept for schema completeness)
+take_profit: 0.02           # base-class field, superseded by tp_natr below
+time_limit: 900
+take_profit_order_type: LIMIT
+trailing_stop:
+position_rebalance_threshold_pct: 0.05
+skip_rebalance: true        # perpetual: no spot inventory to acquire
+# --- quench
+candles_connector: binance_perpetual
+candles_trading_pair: SOL-USDT
+interval: 1m
+natr_length: 14
+vol_window: 60
+fuel_horizon_minutes: 60
+min_spread_pct: 0.0005      # floor for one NATR unit = 5 bps
+tp_natr: 1.0            # used only when tp_spread_mult is 0
+sl_natr: 3.0            # used only when sl_spread_mult is 0
+tp_spread_mult: 1.0     # exit back at mid: a fill at mid-s targets +s. THIS is what makes a wide quote pay
+sl_spread_mult: 3.0     # measured best on 14d SOL: 5,10 / tpX1.0 / slX3.0 / refresh300
+fee_bps_per_side: 2.0   # Bitget VIP0 USDT-M maker = 0.020%; the tp is floored above the round trip
+tp_fee_multiple: 1.5
+inventory_skew_natr: 0.5
+max_inventory_quote: 0      # 0 = total_amount_quote
+fuel_enabled: true
+fuel_url: https://data.ochinimus.app/fuel/{symbol}.json
+fuel_symbol: SOLUSDT
+fuel_refresh_seconds: 10
+fuel_max_age_seconds: 90
+fuel_min_notional: 250000
+fuel_reference_notional: 2000000
+lean_horizon_natr: 3.0
+max_lean_natr: 0.5
+fuse_natr: 1.5
+fuse_min_size: 0.5
+cascade_ratio_brake: 3.0
+require_attributed_cascade: true
+cascade_spread_mult: 2.0
+cascade_amount_mult: 0.5
+fuel_history_path: ""
+fuel_history_max_age_seconds: 0

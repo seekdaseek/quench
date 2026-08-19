@@ -1,0 +1,46 @@
+{
+  "fuel_off": {
+    "net_pnl": -0.16191055236929588,
+    "net_pnl_quote": -129.5284418954367,
+    "total_executors": 22043,
+    "total_executors_with_position": 1919,
+    "total_volume": 767612.0827873831,
+    "total_long": 955,
+    "total_short": 964,
+    "accuracy": 0.4924439812402293,
+    "max_drawdown_usd": -129.93131366385035,
+    "max_drawdown_pct": -0.16241414207981295,
+    "sharpe_ratio": -1.6493714402369302,
+    "profit_factor": 0.5459194015398188,
+    "win_signals": 945,
+    "loss_signals": 974,
+    "executors": 22043,
+    "fuel_states": {
+      "off": 20142
+    },
+    "rows_pull_buy": 0,
+    "rows_pull_sell": 0
+  },
+  "fuel_on": {
+    "net_pnl": -0.15488017744197388,
+    "net_pnl_quote": -123.90414195357911,
+    "total_executors": 22105,
+    "total_executors_with_position": 1893,
+    "total_volume": 755613.9805284147,
+    "total_long": 938,
+    "total_short": 955,
+    "accuracy": 0.49392498679344954,
+    "max_drawdown_usd": -124.30701372199272,
+    "max_drawdown_pct": -0.1553837671524909,
+    "sharpe_ratio": -1.6288719896116681,
+    "profit_factor": 0.5494661933821182,
+    "win_signals": 935,
+    "loss_signals": 958,
+    "executors": 22105,
+    "fuel_states": {
+      "live": 20142
+    },
+    "rows_pull_buy": 0,
+    "rows_pull_sell": 0
+  }
+}

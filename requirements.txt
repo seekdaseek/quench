@@ -1,0 +1,2 @@
+hummingbot==20260729
+pyyaml

@@ -1,0 +1,13 @@
+# generic V2 runner config: start --script v2_with_controllers.py --conf conf/scripts/v2_quench.yml
+script_file_name: v2_with_controllers.py
+markets: {}
+candles_config: []
+controllers_config:
+  - quench_bitget_sol.yml
+time_to_cash_out:
+max_global_drawdown_quote:
+max_controller_drawdown_quote:
+rebalance_interval:
+extra_inventory: 0.02
+min_amount_to_rebalance_usd: 8
+asset_to_rebalance: USDT
