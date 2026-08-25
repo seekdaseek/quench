@@ -1,38 +1,82 @@
 # quench
 
-A liquidation-aware perpetual market maker for Hummingbot (Strategy V2 controller), built for the
-Botcamp Agent Builders Cup (Series 1).
+A volatility-adaptive perpetual market maker for Hummingbot (Strategy V2), plus a routine that reads
+the liquidation landscape and an agent that tunes the maker from it. Built for the Botcamp Agent
+Builders Cup (Series 1).
 
-Most market makers see the order book. quench also sees the *fuel*: where leverage sits above and
-below price and would be force-liquidated if the tape got there. It quotes two-sided, volatility-
-adaptive spreads like a normal maker, and then does four things a normal maker does not:
+Three layers, and the separation is the design:
 
-1. **Magnet lean** — leans the reference price toward the largest *unburned* liquidation cluster
-   within reach (bounded to `max_lean_natr` × NATR). Price tends to walk toward unspent fuel.
-2. **Fuse pull** — inside `fuse_natr` × NATR of a large cluster it pulls the quotes that would be run
-   over: no selling into a short squeeze, no buying into a long cascade.
-3. **Cascade brake** — when realized liquidation flow spikes vs its baseline it widens spreads,
-   halves size and pulls the side being liquidated.
-4. **Burned = spent** — a cluster the tape has traded through is gone; the lean flips off. Re-buying
-   after the magnet is swept is the classic mistake; the controller cannot make it.
+```
+controllers/  quotes.   Candles and its own position. No network, no LLM, tick rate.
+routines/     reports.  Builds the liquidation fuel map and says what it shows. Plain Python, slow.
+agent/        decides.  Reads the report, rewrites the controller's config inside hard bounds.
+```
 
-Fail-safe first: if the fuel feed is stale (> `fuel_max_age_seconds`) or absent, the layer switches
-itself off and the controller is a plain NATR-spread PMM. It never acts on stale fuel. The status
-line always says `FUEL: LIVE | STALE | ABSENT | OFF`.
+The controller is deliberately dull. It quotes two sides at spreads measured in NATR units, skews the
+reference price against inventory, and sets each fill's take-profit and stop as a multiple of the
+spread that fill was quoted at — which is the change that made a wide quote pay at all (see the
+barrier fix below). That is the whole file, 233 lines, and it knows nothing about liquidations.
+
+Everything about liquidations moved outward on 25 Aug 2026, after a review by Federico of the
+Hummingbot Foundation on the Botcamp submission: *"keep the controller simple and just using the
+realtime data that you need, and use routines to get more general data and use the agent to tune your
+controller based on that external data."*
+
+**The measurements below are why that was the right call, and they predate the review.** With the
+cascade brake disabled, the fuel layer inside the controller produced results identical to the cent
+with it switched on and off across 14 days of SOL-USDT — same 53 fills, same +$3.68, same 5.734 bps.
+The magnet lean touched 3,071 of 20,142 rows and changed nothing. The fuse fired zero times. The
+reason is in the map's own numbers: unburned clusters sit a median 5.57 volatility units above price
+and 2.63 below, and only ~36% of snapshots carry one at all. A quote resting 30 bps from mid cannot
+react to something five volatility units away.
+
+So the liquidation map is real information on a slow clock. It was never tick-rate information. It
+now lives where its clock belongs.
+
+### How the agent reaches a running bot
+
+It writes a file. `StrategyV2Base.update_controllers_configs()` re-reads the controller YAML every
+`config_update_interval` seconds (default 10) and calls `ControllerBase.update_config()`, which
+applies only the fields whose `json_schema_extra` carries `is_updatable`. The agent never imports the
+controller, never touches the trading loop, and cannot restart the bot. A field without that flag is
+a silent no-op, so `agent/policy.validate()` rejects those by name.
+
+### What the agent cannot do
+
+Quote under the measured fee floor. Gross edge per round trip on this tape was **2.42 bps at spreads
+of 4,8** against a **4.0 bps round trip** at Bitget VIP0 — that configuration loses however often it
+fills. 5,10 measured 5.73. The floor is 5 NATR units and nothing crosses it, whatever the report says
+and whatever a model picks. An optional LLM layer may only *choose between* candidates the
+deterministic policy already generated and validated; it cannot author a number, and anything it
+returns that is not a candidate id falls back to the deterministic decision and is recorded as such
+in the journal.
+
+Full agent description in `agent/AGENT.md`.
 
 ## Layout
 
 ```
-controllers/market_making/quench.py    the controller (single file, drop into a Hummingbot instance)
-service/fuelmap_service.py             fuel-map collector (Binance USDT-M OI + klines -> clusters JSON)
+controllers/market_making/quench.py    the controller. Quoting and risk only, 233 lines
+routines/fuelmap.py                    ROUTINE: snapshot -> report, ranked against its own history
+routines/fuel/model.py                 the cluster math, unchanged, moved out of the controller
+service/fuelmap_service.py             collector (Binance USDT-M OI + klines -> clusters JSON)
+agent/policy.py                        AGENT: the decision, its bounds, and the last validation gate
+agent/tune.py                          AGENT: report -> controller YAML, journalled every run
+agent/AGENT.md                         what the agent observes, decides, and cannot do
 backtest/harness.py                    offline harness around Hummingbot's REAL V2 backtesting engine
-backtest/run_backtest.py               fuel ON vs OFF on the same tape
+backtest/run_backtest.py               one config end to end on a tape
 backtest/sweep.py                      parameter grid; gross bps vs fees, per-trade t-stat, walk-forward halves
-backtest/inspect_fuel.py               what the fuel layer can possibly do on a tape, in seconds
+backtest/inspect_fuel.py               what the fuel map can possibly do on a tape, in seconds
 backtest/fetch_data.py                 pull real 1m klines + a deterministic no-look-ahead fuel replay
 conf/controllers/quench_{bitget,gate}_sol.yml, conf/scripts/v2_quench.yml
-tests/                                 34 tests, all offline
+tests/                                 52 tests, all offline
 ```
+
+> **The sections below are the build log, and they describe the SINGLE-FILE controller as it was
+> before 25 Aug 2026.** Every number in them is real and was measured on real tape; they are kept
+> because they are the evidence for the split, not a description of the code as it stands. Where they
+> say "the fuel layer", "the magnet lean", "the fuse" or "the cascade brake", read: components that
+> used to live inside the controller and now live in `routines/` and `agent/`.
 
 ## First real-tape result (SOL-USDT, 14 days of 1m Binance candles, Aug 1-15 2026)
 
@@ -173,43 +217,59 @@ Two caveats that keep this a hypothesis: the 2.3-2.4 bps gross edge was measured
 candles and does not automatically exist on XRP-RLUSD, and the simulator fills every touch — an
 assumption that is most wrong exactly where this configuration makes the most money.
 
-## What is verified (sandbox, hummingbot==20260729 from PyPI, Python 3.12)
+## What is verified (hummingbot==20260729 from PyPI, Python 3.12)
 
-- `python3 -m unittest discover -s tests` — 34 tests pass: fuel math, fuel-map model, replay
-  no-look-ahead, YAML configs load, and the controller running **inside Hummingbot's real
-  `BacktestingEngineBase`** on synthetic tape (baseline quotes both sides bracketing the reference;
-  with a squeeze cluster parked above, sell quotes are pulled inside the fuse window, buys keep
-  quoting, the lean is upward and bounded, and a crossed cluster is treated as burned).
-- `python3 backtest/run_backtest.py --synthetic` runs end to end (688 executors on a 10h synthetic
-  tape; fuel ON with no history behaves identically to OFF — the fail-safe).
+- `python3 -m unittest discover -s tests` — **52 tests**, five consecutive clean runs: cluster math,
+  fuel-map model, replay no-look-ahead, YAML configs load, the barrier rules, the routine, the agent
+  policy, and the controller running **inside Hummingbot's real `BacktestingEngineBase`** with both
+  sides quoted and every entry price bracketing the reference of its own candle.
+- **The split is behaviour-neutral on real tape.** Before and after, on the same 14 days of SOL-USDT:
+  53 fills, $12.16 gross, $8.48 fees, +$3.68 net, 5.734 bps, dd −$1.38, t 2.4, halves +2.28 / +1.40.
+  Identical to the cent.
+- Three guard tests were each verified by deliberately breaking the thing they guard and watching the
+  test fail: the controller cannot regain a fuel layer, the runners cannot pass a rejected field, and
+  every lever the agent writes must carry `is_updatable`.
+- The agent's containment was verified by attack: `4,8` is refused at the fee floor, a non-updatable
+  field is refused by name, and an LLM told to answer `{"buy_spreads":"1,2"}` had its answer discarded
+  in favour of the deterministic decision.
 
-Synthetic results carry no PnL information. The claim to test on real tape is *fuel ON vs OFF on the
-same candles*, via `fetch_data.py` + `run_backtest.py`.
+Synthetic-tape PnL carries no information and is never quoted here as a result.
 
 ## What is NOT yet verified
 
 - Live connector run on Bitget / Gate (paper or funded). The controller only uses framework
-  primitives (`PositionExecutorConfig`, `TripleBarrierConfig`, `StopExecutorAction`) so nothing exotic
-  is required, but it has not been started against a live connector yet.
+  primitives (`PositionExecutorConfig`, `TripleBarrierConfig`) so nothing exotic is required, but it
+  has not been started against a live connector yet.
 - The fuel service against Binance from the VPS (network + geo). It writes nothing on error, so a
   dead collector can never steer quotes.
-- Real-data backtest numbers.
+- 🔴 **The agent's tilt.** The fee floor and the cascade rule come from measurements on a real tape.
+  The tilt does not. The identical idea applied per-tick did nothing at all over 14 days, and the
+  argument for retrying it on a slow clock is that the map's own distances say it is slow information.
+  **That is a reason to test it, not evidence that it works.** The test is a sweep with the tilt on
+  and off against a real tape, and it has not been run.
+- Whether the agent's changes help or hurt over a live session. Nothing here claims they do.
 
 ## Run it
 
 ```bash
 pip install hummingbot==20260729            # PyPI wheel exists for macOS arm64 + Linux x86_64, Python 3.12
-python3 -m unittest discover -s tests       # 34 tests, ~5s, no network
-python3 backtest/run_backtest.py --synthetic
+python3 -m unittest discover -s tests       # 52 tests, ~14s, no network
 python3 backtest/fetch_data.py --symbol SOLUSDT --days 14        # needs Binance reachable
-python3 backtest/run_backtest.py --csv data/SOLUSDT_1m.csv --fuel data/SOLUSDT_fuel.json --json out.json
-python3 backtest/sweep.py --csv data/SOLUSDT_1m.csv --fuel data/SOLUSDT_fuel.json \
-  --spreads 2,4 3,6 5,10 --tp-mult 1.0 1.5 2.0 --sl-mult 2.0 3.0 --refresh 300 --json sweep.json
+python3 backtest/sweep.py --csv data/SOLUSDT_1m.csv \
+  --spreads 5,10 6,12 --tp-mult 1.0 --sl-mult 3.0 --refresh 300 --json sweep.json
+
+# the routine, then the agent
+python3 routines/fuelmap.py --snapshot data/SOLUSDT_fuel.json --out reports/SOLUSDT.json
+python3 agent/tune.py --report reports/SOLUSDT.json \
+  --config conf/controllers/quench_bitget_sol.yml --dry-run    # drop --dry-run to actually write
 ```
 
-Live: copy `controllers/market_making/quench.py` into your Hummingbot instance's `controllers/market_making/`,
-the YAML into `conf/controllers/`, then `start --script v2_with_controllers.py --conf conf/scripts/v2_quench.yml`.
-Set `fuel_url` to your collector (or `fuel_enabled: false` to run it as a plain PMM).
+Live: copy `controllers/market_making/quench.py` into your Hummingbot instance's
+`controllers/market_making/`, the YAML into `conf/controllers/`, then
+`start --script v2_with_controllers.py --conf conf/scripts/v2_quench.yml`. The controller runs alone
+and needs nothing else. Point `agent/tune.py` at that same YAML on a cron and the bot picks up its
+changes within 10 seconds — no restart, and stopping the agent simply leaves the last settings in
+place.
 
 Fuel service:
 ```bash
@@ -234,8 +294,11 @@ otherwise an OI-drop proxy.
 ## Parameters worth tuning on real tape
 
 `buy_spreads/sell_spreads` (NATR units) and `executor_refresh_time` together — these decide whether
-gross edge clears the fee, and nothing else matters until it does. Then `tp_natr`, `sl_natr`,
-`time_limit`, `fuel_horizon_minutes`, `fuse_natr`, `lean_horizon_natr`, `max_lean_natr`,
-`fuel_reference_notional`, `cascade_ratio_brake`.
+gross edge clears the fee, and nothing else matters until it does. Then `tp_spread_mult`,
+`sl_spread_mult`, `time_limit`, `inventory_skew_natr`.
+
+The agent's own bounds live in `agent/policy.Bounds`: `min_spread_units` (the fee floor, 5.0),
+`max_spread_units`, `max_tilt_pct`, `close_cluster_pctile`, `cascade_size_cut`. Raising the floor is
+always safe; lowering it is how you lose money, and the measured reason is in the docstring.
 
 MIT.
