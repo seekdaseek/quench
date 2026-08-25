@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import harness  # noqa: E402
 
-q = harness.load_quench_module()
+q = harness.load_fuel_module()
 
 
 def main():

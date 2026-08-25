@@ -147,3 +147,21 @@ def summarize(result: dict) -> dict:
     out = {k: r.get(k) for k in keys if k in r}
     out["executors"] = len(result["executors"])
     return out
+
+
+FUEL_MODEL_PATH = os.path.join(REPO_ROOT, "routines", "fuel", "model.py")
+
+
+def load_fuel_module():
+    """Import routines/fuel/model.py as module 'fuelmodel'.
+
+    The pure fuel math moved out of the controller on Aug 25 2026 (see the controller docstring).
+    It imports no Hummingbot and no framework — the tests that cover it are plain unit tests now.
+    """
+    if "fuelmodel" in sys.modules:
+        return sys.modules["fuelmodel"]
+    spec = importlib.util.spec_from_file_location("fuelmodel", FUEL_MODEL_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["fuelmodel"] = mod
+    spec.loader.exec_module(mod)
+    return mod

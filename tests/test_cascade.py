@@ -6,9 +6,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backtest"))
-from harness import load_quench_module  # noqa: E402
+from harness import load_fuel_module  # noqa: E402
 
-q = load_quench_module()
+q = load_fuel_module()
 NOW = 1_755_270_000.0
 
 

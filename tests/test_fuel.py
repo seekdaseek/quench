@@ -4,9 +4,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backtest"))
-from harness import load_quench_module  # noqa: E402
+from harness import load_fuel_module  # noqa: E402
 
-q = load_quench_module()
+q = load_fuel_module()
 
 NOW = 1_755_270_000.0
 REF = 75.0
@@ -131,3 +131,16 @@ class History(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class StaleSemantics(unittest.TestCase):
+    """Moved out of test_backtest.py Aug 25 2026: this is pure math, not controller behaviour."""
+
+    def test_stale_snapshot_neutralises_the_layer(self):
+        sig = q.compute_fuel_signal({"ts": 0, "clusters": [{"price": 1, "side": "short", "notional": 1e9}]},
+                                    75.0, 0.004, 10_000.0, max_age_s=90)
+        self.assertEqual(sig.state, q.FUEL_STALE)
+
+
+if __name__ == "__main__":
+    unittest.main()

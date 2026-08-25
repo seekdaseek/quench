@@ -8,9 +8,9 @@ sys.path.insert(0, os.path.join(HERE, "..", "backtest"))
 spec = importlib.util.spec_from_file_location("fuelmap_service", os.path.join(HERE, "..", "service", "fuelmap_service.py"))
 fm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fm)
-from harness import load_quench_module  # noqa: E402
+from harness import load_fuel_module  # noqa: E402
 
-q = load_quench_module()
+q = load_fuel_module()
 
 T0 = 1_755_200_000
 

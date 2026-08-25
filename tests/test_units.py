@@ -3,9 +3,9 @@ liquidation cluster hundreds of units away, so the fuse could never fire. Distan
 in horizon volatility."""
 import math, os, sys, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backtest"))
-from harness import load_quench_module  # noqa: E402
+from harness import load_fuel_module  # noqa: E402
 
-q = load_quench_module()
+q = load_fuel_module()
 NOW = 1_755_270_000.0
 REF = 75.0
 NATR_1M = 0.0006      # measured order of magnitude for SOL 1m: ~6 bps

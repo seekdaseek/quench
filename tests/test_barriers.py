@@ -15,7 +15,7 @@ q = harness.load_quench_module()
 def controller(**over):
     cfg = dict(id="bar", connector_name="bitget_perpetual", trading_pair="SOL-USDT",
                candles_connector="binance_perpetual", candles_trading_pair="SOL-USDT", interval="1m",
-               total_amount_quote=Decimal("800"), buy_spreads="1,3", sell_spreads="1,3", fuel_enabled=False,
+               total_amount_quote=Decimal("800"), buy_spreads="1,3", sell_spreads="1,3",
                fee_bps_per_side=Decimal("2.0"), tp_fee_multiple=Decimal("1.5"))
     cfg.update(over)
     c = q.QuenchController(q.QuenchControllerConfig(**cfg), market_data_provider=harness.OfflineDataProvider({}, {}),

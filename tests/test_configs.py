@@ -12,7 +12,7 @@ class Configs(unittest.TestCase):
             c = q.QuenchControllerConfig(**d)
             self.assertEqual(c.connector_name, conn)
             self.assertEqual(c.controller_name, "quench")
-            self.assertEqual(c.fuel_symbol, "SOLUSDT")
+            
             self.assertTrue(c.skip_rebalance)
 if __name__ == "__main__":
     unittest.main()

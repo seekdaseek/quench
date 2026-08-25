@@ -18,7 +18,7 @@ import harness  # noqa: E402
 q = harness.load_quench_module()
 
 
-def build_config(a, fuel_on: bool):
+def build_config(a):
     kw = dict(
         id="quench-bt",
         connector_name=a.connector, trading_pair=a.pair,
@@ -27,10 +27,7 @@ def build_config(a, fuel_on: bool):
         buy_spreads=a.spreads, sell_spreads=a.spreads,
         executor_refresh_time=a.refresh, cooldown_time=15, time_limit=a.time_limit,
         tp_natr=Decimal(str(a.tp)), sl_natr=Decimal(str(a.sl)), natr_length=14,
-        fuel_enabled=fuel_on,
     )
-    if fuel_on and a.fuel:
-        kw["fuel_history_path"] = a.fuel
     return q.QuenchControllerConfig(**kw)
 
 
@@ -50,21 +47,17 @@ def main():
         candles = harness.load_candles_csv(a.csv)
     else:
         ap.error("--csv or --synthetic")
+    if a.fuel:
+        print("note: --fuel is ignored since Aug 25 2026. The liquidation map left the controller;\n"
+              "      it is now routines/fuel + agent/. This runner measures quoting only.")
     out = {}
-    for label, fuel_on in (("fuel_off", False), ("fuel_on", True)):
-        if fuel_on and not a.fuel and not a.synthetic:
-            print("fuel_on skipped: no --fuel history given"); continue
-        cfg = build_config(a, fuel_on)
-        res = harness.run(cfg, candles, trade_cost=a.trade_cost)
-        summ = harness.summarize(res)
-        feats = res["processed_data"]["features"]
-        summ["fuel_states"] = feats["fuel_state"].value_counts().to_dict() if "fuel_state" in feats else {}
-        summ["rows_pull_buy"] = int(feats["pull_buy"].sum()) if "pull_buy" in feats else 0
-        summ["rows_pull_sell"] = int(feats["pull_sell"].sum()) if "pull_sell" in feats else 0
-        out[label] = summ
-        print(f"\n== {label} ==")
-        for k, v in summ.items():
-            print(f"  {k}: {v}")
+    cfg = build_config(a)
+    res = harness.run(cfg, candles, trade_cost=a.trade_cost)
+    summ = harness.summarize(res)
+    out["quench"] = summ
+    print("\n== quench ==")
+    for k, v in summ.items():
+        print(f"  {k}: {v}")
     if a.json:
         with open(a.json, "w") as fh:
             json.dump(out, fh, indent=2, default=str)
